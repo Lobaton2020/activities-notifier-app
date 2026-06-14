@@ -46,6 +46,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               setState(() {});
             },
           ),
+          _buildSwitchTile(
+            icon: Icons.record_voice_over,
+            title: 'Voz (TTS)',
+            subtitle: 'Anunciar tarea en voz alta',
+            value: notificationService.ttsEnabled,
+            onChanged: (value) {
+              notificationService.setTtsEnabled(value);
+              setState(() {});
+            },
+          ),
           const SizedBox(height: 24),
           _buildSectionTitle('Prueba'),
           _buildActionTile(
@@ -59,6 +69,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Probar alarma',
             subtitle: 'Vibración y flash de pantalla',
             onTap: _onTestAlarm,
+          ),
+          _buildActionTile(
+            icon: Icons.record_voice_over,
+            title: 'Probar voz (TTS)',
+            subtitle: 'Anunciar tarea en voz alta',
+            onTap: _onTestTts,
           ),
         ],
       ),
@@ -145,6 +161,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (cron != null && cron.tasks.isNotEmpty) {
       final task = cron.tasks.first;
       await notificationService.showTestNotification(task);
+    }
+  }
+
+  void _onTestTts() async {
+    final cron = ApiService.instance.currentCron;
+    if (cron != null && cron.tasks.isNotEmpty) {
+      final task = cron.tasks.first;
+      await notificationService.speakTask(task);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Reproduciendo: ${task.description}'),
+          backgroundColor: const Color(0xFF2196F3),
+        ),
+      );
     }
   }
 }

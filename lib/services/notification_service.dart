@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:lobmindergo/models/task_model.dart';
+import 'package:lobmindergo/services/api_service.dart';
 import 'package:vibration/vibration.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
@@ -87,8 +88,19 @@ class NotificationService {
         ?.requestNotificationsPermission();
   }
 
-  void _onNotificationTapped(NotificationResponse response) {
-    // Handle notification tap
+  void _onNotificationTapped(NotificationResponse response) async {
+    final payload = response.payload;
+    if (payload != null && payload.isNotEmpty) {
+      final task = ApiService.instance.currentCron?.tasks.firstWhere(
+        (t) => t.id == payload,
+        orElse: () =>
+            ApiService.instance.currentCron?.tasks.first ??
+            ApiService.instance.currentCron!.tasks.first,
+      );
+      if (task != null) {
+        await speakTask(task);
+      }
+    }
   }
 
   Future<void> scheduleTaskNotification(TaskModel task) async {
