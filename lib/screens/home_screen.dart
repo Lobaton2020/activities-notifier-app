@@ -38,21 +38,23 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorMessage = null;
     });
     try {
-      _log('Cargando crons...');
+      _log('Cargando actividades...');
       await ApiService.instance.fetchCrons(limit: 10);
-      _log(
-        'Crons cargados: ${ApiService.instance.currentCron?.name ?? "ninguno"}',
-      );
+      final cron = ApiService.instance.currentCron;
+      if (cron != null) {
+        _log('${cron.tasks.length} actividades cargadas');
+      } else {
+        _log('No hay actividades disponibles');
+      }
       _scheduleNotifications();
-      _log('Notificaciones programadas');
+      _log('Listo');
     } catch (e) {
-      _log('Error: $e');
+      _log('Error de conexión');
       setState(() {
         _errorMessage = 'Error al cargar: $e';
       });
     } finally {
       setState(() => _isLoading = false);
-      _log('Carga completada');
     }
   }
 
@@ -106,24 +108,40 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(8),
-            color: const Color(0xFF1A1A2E),
-            child: Text(
-              _logMessage,
-              style: const TextStyle(
-                color: Color(0xFF00F5D4),
-                fontSize: 12,
-                fontFamily: 'monospace',
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: const Color(0xFF7B2CBF),
+            child: Row(
+              children: [
+                if (_isLoading)
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                else
+                  Icon(
+                    _errorMessage != null ? Icons.error : Icons.check_circle,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _logMessage,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF7B2CBF)),
-                  )
-                : _buildBody(),
-          ),
+          Expanded(child: _buildBody()),
         ],
       ),
     );
