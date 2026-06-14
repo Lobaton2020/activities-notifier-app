@@ -179,12 +179,16 @@ class _TaskCardState extends State<TaskCard> {
       ),
     );
 
-    if (widget.onEdit != null) {
+    if (widget.onEdit != null || widget.onDelete != null) {
       return Dismissible(
         key: Key(widget.task.id),
-        direction: DismissDirection.startToEnd,
+        direction: DismissDirection.horizontal,
         confirmDismiss: (direction) async {
-          widget.onEdit!();
+          if (direction == DismissDirection.startToEnd) {
+            widget.onEdit!();
+          } else if (direction == DismissDirection.endToStart) {
+            _showDeleteDialog();
+          }
           return false;
         },
         background: Container(
@@ -196,6 +200,16 @@ class _TaskCardState extends State<TaskCard> {
           alignment: Alignment.centerLeft,
           padding: const EdgeInsets.only(left: 20),
           child: const Icon(Icons.edit, color: Colors.white),
+        ),
+        secondaryBackground: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          child: const Icon(Icons.delete, color: Colors.white),
         ),
         child: cardContent,
       );

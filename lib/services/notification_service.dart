@@ -5,6 +5,7 @@ import 'package:vibration/vibration.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 
 class NotificationService {
   static final NotificationService instance = NotificationService._internal();
@@ -12,14 +13,17 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
+  final FlutterTts _tts = FlutterTts();
 
   bool _vibrationEnabled = true;
   bool _screenFlashEnabled = true;
   bool _soundEnabled = true;
+  bool _ttsEnabled = true;
 
   bool get vibrationEnabled => _vibrationEnabled;
   bool get screenFlashEnabled => _screenFlashEnabled;
   bool get soundEnabled => _soundEnabled;
+  bool get ttsEnabled => _ttsEnabled;
 
   Future<void> initialize() async {
     await _loadSettings();
@@ -36,6 +40,15 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
     await _requestPermissions();
+    await _initTts();
+  }
+
+  Future<void> _initTts() async {
+    await _tts.setLanguage('es-CO');
+    await _tts.setSpeechRate(0.5);
+    await _tts.setVolume(1.0);
+    await _tts.setPitch(1.0);
+    print('TTS initialized: es-CO');
   }
 
   Future<void> _loadSettings() async {
@@ -43,6 +56,7 @@ class NotificationService {
     _vibrationEnabled = prefs.getBool('vibrationEnabled') ?? true;
     _screenFlashEnabled = prefs.getBool('screenFlashEnabled') ?? true;
     _soundEnabled = prefs.getBool('soundEnabled') ?? true;
+    _ttsEnabled = prefs.getBool('ttsEnabled') ?? true;
   }
 
   Future<void> _saveSettings() async {
@@ -50,6 +64,7 @@ class NotificationService {
     await prefs.setBool('vibrationEnabled', _vibrationEnabled);
     await prefs.setBool('screenFlashEnabled', _screenFlashEnabled);
     await prefs.setBool('soundEnabled', _soundEnabled);
+    await prefs.setBool('ttsEnabled', _ttsEnabled);
   }
 
   Future<void> testVibration() async {
@@ -203,6 +218,21 @@ class NotificationService {
   void setSoundEnabled(bool enabled) {
     _soundEnabled = enabled;
     _saveSettings();
+  }
+
+  void setTtsEnabled(bool enabled) {
+    _ttsEnabled = enabled;
+    _saveSettings();
+  }
+
+  Future<void> speakTask(TaskModel task) async {
+    if (!_ttsEnabled) return;
+    final text = '${task.project?.name ?? "Tarea"}: ${task.description}';
+    await _tts.speak(text);
+  }
+
+  Future<void> stopSpeaking() async {
+    await _tts.stop();
   }
 
   Future<void> testNotification() async {

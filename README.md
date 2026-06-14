@@ -10,7 +10,7 @@ App Flutter para gestionar tareas y notificaciones programadas.
 flutter pub get
 
 # Ejecutar en dispositivo/emulador
-flutter run
+flutter run -d {device_name}
 
 # Build debug APK
 flutter build apk --debug
