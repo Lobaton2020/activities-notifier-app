@@ -1,4 +1,4 @@
-name: activities_notifier_app
+name: lobmindergo
 description: "App para notificar actividades diarias desde API GraphQL"
 publish_to: 'none'
 version: 1.0.0+1

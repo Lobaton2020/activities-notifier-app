@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:activities_notifier_app/models/cron.dart';
-import 'package:activities_notifier_app/services/api_service.dart';
-import 'package:activities_notifier_app/services/notification_service.dart';
-import 'package:activities_notifier_app/widgets/task_card.dart';
-import 'package:activities_notifier_app/widgets/side_drawer.dart';
+import 'package:lobmindergo/models/cron.dart';
+import 'package:lobmindergo/models/task_model.dart';
+import 'package:lobmindergo/services/api_service.dart';
+import 'package:lobmindergo/services/notification_service.dart';
+import 'package:lobmindergo/widgets/task_card.dart';
+import 'package:lobmindergo/widgets/side_drawer.dart';
 import 'package:intl/intl.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -14,15 +15,76 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   bool _isLoading = false;
-  String? _errorMessage;
   String _logMessage = 'Iniciando...';
+  String? _errorMessage;
+  bool _isCreatingTask = false;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeIn));
     _loadData();
+    _fadeController.forward();
+
+    _startHourlyCheck();
+  }
+
+  void _startHourlyCheck() {
+    Future.delayed(const Duration(hours: 1), () {
+      if (mounted) {
+        _checkTodayTasks();
+        _startHourlyCheck();
+      }
+    });
+  }
+
+  Future<void> _checkTodayTasks() async {
+    print('=== Hourly check: Looking for today tasks ===');
+    await ApiService.instance.fetchCrons(limit: 20);
+    final today = DateTime.now();
+    final cronList = ApiService.instance.cronList;
+    print('Today: $today');
+    print('Available crons: ${cronList.length}');
+
+    Cron? todayCron;
+    for (final cron in cronList) {
+      final cronDate = DateTime.tryParse(cron.date);
+      print('Checking cron: ${cron.name} - date: ${cron.date}');
+      if (cronDate != null &&
+          cronDate.year == today.year &&
+          cronDate.month == today.month &&
+          cronDate.day == today.day) {
+        todayCron = cron;
+        print('Found today cron: ${cron.name}');
+        break;
+      }
+    }
+
+    if (todayCron != null) {
+      await ApiService.instance.fetchCronById(todayCron.id);
+      _scheduleNotifications();
+    } else {
+      print('No cron found for today');
+    }
+    print('==========================================');
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
   }
 
   void _log(String message) {
@@ -30,39 +92,84 @@ class _HomeScreenState extends State<HomeScreen> {
       _logMessage = message;
     });
     debugPrint('[HomeScreen] $message');
+    if (message == 'Listo') {
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) {
+          setState(() {
+            _logMessage = '';
+          });
+        }
+      });
+    }
   }
 
   Future<void> _loadData() async {
     setState(() {
-      _isLoading = true;
       _errorMessage = null;
     });
     try {
-      _log('Cargando actividades...');
+      _log('Cargando...');
       await ApiService.instance.fetchCrons(limit: 10);
       final cron = ApiService.instance.currentCron;
       if (cron != null) {
-        _log('${cron.tasks.length} actividades cargadas');
+        _log(cron.name);
+        _fadeController.forward();
+        await ApiService.instance.fetchCronById(cron.id);
+        _scheduleNotifications();
+        _log(
+          '${ApiService.instance.currentCron?.tasks.length ?? 0} actividades',
+        );
       } else {
-        _log('No hay actividades disponibles');
+        _log('Sin cronogramas');
       }
-      _scheduleNotifications();
-      _log('Listo');
     } catch (e) {
-      _log('Error de conexión');
+      final msg = e.toString();
+      _log(msg.contains('GraphQL') ? msg : 'Error de conexión');
       setState(() {
-        _errorMessage = 'Error al cargar: $e';
+        _errorMessage = msg;
       });
     } finally {
-      setState(() => _isLoading = false);
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() => _logMessage = '');
+        }
+      });
     }
   }
 
   void _scheduleNotifications() {
     final cron = ApiService.instance.currentCron;
     if (cron != null) {
+      final now = DateTime.now();
+      print('=== Scheduling notifications for ${cron.name} ===');
+      print('Current time: $now');
+      int count = 0;
       for (final task in cron.tasks) {
-        NotificationService.instance.scheduleTaskNotification(task);
+        if (!task.state && task.scheduledDateTime.isAfter(now)) {
+          print(
+            'Scheduling: ${task.description} at ${task.formattedTime} (${task.scheduledDateTime}) - Project: ${task.project?.name ?? "Sin proyecto"}',
+          );
+          NotificationService.instance.scheduleTaskNotification(task);
+          count++;
+        } else if (task.state) {
+          print('Skipping (completed): ${task.description}');
+        } else if (!task.scheduledDateTime.isAfter(now)) {
+          print(
+            'Skipping (past): ${task.description} at ${task.formattedTime}',
+          );
+        }
+      }
+      print('Total scheduled: $count notifications');
+      print('==========================================');
+      if (count > 0) {
+        final tasksInfo = cron.tasks
+            .where((t) => !t.state && t.scheduledDateTime.isAfter(now))
+            .map(
+              (t) =>
+                  '${t.formattedTime} - ${t.project?.name ?? "Sin proyecto"}',
+            )
+            .join(', ');
+        _log('$count notificaciones: $tasksInfo');
       }
     }
   }
@@ -75,11 +182,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: SideDrawer(
+        isLoading: _isLoading,
         onCronSelected: (cron) async {
           Navigator.pop(context);
+          _log(cron.name);
+          _fadeController.forward();
+          await Future.delayed(const Duration(milliseconds: 400));
           await ApiService.instance.fetchCronById(cron.id);
           _scheduleNotifications();
           setState(() {});
+          _fadeController.forward();
         },
       ),
       appBar: AppBar(
@@ -95,54 +207,386 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.refresh, color: Color(0xFF00F5D4)),
             onPressed: _refreshData,
           ),
-          IconButton(
-            icon: const Icon(
-              Icons.notifications_active,
-              color: Color(0xFF00F5D4),
-            ),
-            onPressed: () => NotificationService.instance.testNotification(),
-          ),
         ],
       ),
       body: Column(
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: const Color(0xFF7B2CBF),
-            child: Row(
-              children: [
-                if (_isLoading)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            child: _logMessage.isNotEmpty
+                ? Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    color: const Color(0xFF2196F3),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _errorMessage != null
+                              ? Icons.error
+                              : Icons.check_circle,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _logMessage,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   )
-                else
-                  Icon(
-                    _errorMessage != null ? Icons.error : Icons.check_circle,
-                    color: Colors.white,
-                    size: 20,
+                : const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: FadeTransition(opacity: _fadeAnimation, child: _buildBody()),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showAddTaskDialog,
+        backgroundColor: const Color(0xFF2196F3),
+        child: const Icon(
+          Icons.add,
+          color: Colors.white,
+          semanticLabel: 'Añadir tarea',
+        ),
+      ),
+    );
+  }
+
+  void _showAddTaskDialog() {
+    _isCreatingTask = false;
+    final descController = TextEditingController();
+    final hourController = TextEditingController();
+    final minuteController = TextEditingController();
+    final defaultProject = ApiService.instance.projects.firstWhere(
+      (p) => p['name'] == 'Default',
+      orElse: () => ApiService.instance.projects.isNotEmpty
+          ? ApiService.instance.projects.first
+          : {},
+    );
+    Map<String, dynamic>? selectedProject = defaultProject.isNotEmpty
+        ? defaultProject
+        : null;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1A1A2E),
+            title: const Text(
+              'Nueva Tarea',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: descController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción',
+                    labelStyle: TextStyle(color: Colors.grey),
                   ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _logMessage,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: hourController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Hora',
+                          labelStyle: TextStyle(color: Colors.grey),
+                        ),
+                      ),
                     ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: minuteController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Minuto',
+                          labelStyle: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButton<Map<String, dynamic>>(
+                  value: selectedProject,
+                  dropdownColor: const Color(0xFF1A1A2E),
+                  hint: const Text(
+                    'Seleccionar Proyecto',
+                    style: TextStyle(color: Colors.grey),
                   ),
+                  isExpanded: true,
+                  items: ApiService.instance.projects.map((project) {
+                    return DropdownMenuItem<Map<String, dynamic>>(
+                      value: project,
+                      child: Text(
+                        project['name'] ?? '',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedProject = value;
+                    });
+                  },
                 ),
               ],
             ),
-          ),
-          Expanded(child: _buildBody()),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (descController.text.isEmpty || selectedProject == null) {
+                    return;
+                  }
+                  setDialogState(() => _isCreatingTask = true);
+                  final hour = int.tryParse(hourController.text) ?? 0;
+                  final minute = int.tryParse(minuteController.text) ?? 0;
+                  try {
+                    final success = await ApiService.instance.createTask(
+                      ApiService.instance.currentCron!.id,
+                      descController.text,
+                      hour,
+                      minute,
+                      selectedProject!,
+                    );
+                    if (success) {
+                      Navigator.pop(dialogContext);
+                      await ApiService.instance.fetchCronById(
+                        ApiService.instance.currentCron!.id,
+                      );
+                      setState(() {});
+                      _fadeController.reset();
+                      _fadeController.forward();
+                      final newTask = ApiService.instance.currentCron?.tasks
+                          .where((t) => t.description == descController.text)
+                          .firstOrNull;
+                      if (newTask != null) {
+                        await NotificationService.instance
+                            .scheduleTaskNotification(newTask);
+                      }
+                      _log('Tarea creada: ${descController.text}');
+                    } else {
+                      _log('Error al crear tarea');
+                      setDialogState(() => _isCreatingTask = false);
+                    }
+                  } catch (e) {
+                    _log('Error: $e');
+                    setDialogState(() => _isCreatingTask = false);
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                  foregroundColor: Colors.white,
+                ),
+                child: _isCreatingTask
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Enviar',
+                        style: TextStyle(color: Colors.white),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditTaskDialog(TaskModel task) {
+    final descController = TextEditingController(text: task.description);
+    final hourController = TextEditingController(
+      text: task.hour.toString().padLeft(2, '0'),
+    );
+    final minuteController = TextEditingController(
+      text: task.minute.toString().padLeft(2, '0'),
+    );
+    Map<String, dynamic>? selectedProject;
+    if (task.project != null) {
+      for (var p in ApiService.instance.projects) {
+        if (p['id'] == task.project!.id) {
+          selectedProject = p;
+          break;
+        }
+      }
+    }
+    bool isEditing = false;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1A1A2E),
+            title: const Text(
+              'Editar Tarea',
+              style: TextStyle(color: Colors.white),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: descController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Descripción',
+                    labelStyle: TextStyle(color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: hourController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Hora',
+                          labelStyle: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: minuteController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Minuto',
+                          labelStyle: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                DropdownButton<Map<String, dynamic>>(
+                  value: selectedProject,
+                  dropdownColor: const Color(0xFF1A1A2E),
+                  hint: const Text(
+                    'Seleccionar Proyecto',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  isExpanded: true,
+                  items: ApiService.instance.projects.map((project) {
+                    return DropdownMenuItem<Map<String, dynamic>>(
+                      value: project,
+                      child: Text(
+                        project['name'] ?? '',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedProject = value;
+                    });
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text(
+                  'Cancelar',
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: isEditing
+                    ? null
+                    : () async {
+                        if (descController.text.isEmpty ||
+                            selectedProject == null)
+                          return;
+                        setDialogState(() => isEditing = true);
+                        final hour = int.tryParse(hourController.text) ?? 0;
+                        final minute = int.tryParse(minuteController.text) ?? 0;
+                        try {
+                          final success = await ApiService.instance.editTask(
+                            task.id,
+                            descController.text,
+                            hour,
+                            minute,
+                            selectedProject!,
+                          );
+                          if (success) {
+                            Navigator.pop(dialogContext);
+                            await ApiService.instance.fetchCronById(
+                              ApiService.instance.currentCron!.id,
+                            );
+                            setState(() {});
+                            _fadeController.reset();
+                            _fadeController.forward();
+                            _log('Tarea actualizada');
+                          } else {
+                            _log('Error al actualizar');
+                            setDialogState(() => isEditing = false);
+                          }
+                        } catch (e) {
+                          _log('Error: $e');
+                          setDialogState(() => isEditing = false);
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2196F3),
+                  foregroundColor: Colors.white,
+                ),
+                child: isEditing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Guardar',
+                        style: TextStyle(color: Colors.white),
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -166,7 +610,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.refresh),
               label: const Text('Reintentar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7B2CBF),
+                backgroundColor: const Color(0xFF2196F3),
                 foregroundColor: Colors.white,
               ),
             ),
@@ -193,7 +637,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: const Icon(Icons.refresh),
               label: const Text('Recargar'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF7B2CBF),
+                backgroundColor: const Color(0xFF2196F3),
                 foregroundColor: Colors.white,
               ),
             ),
@@ -204,36 +648,54 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return RefreshIndicator(
       onRefresh: _refreshData,
-      color: const Color(0xFF7B2CBF),
+      color: const Color(0xFF2196F3),
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(child: _buildHeader(cron)),
-          SliverPadding(
-            padding: const EdgeInsets.all(16),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final task = cron.tasks[index];
-                return TaskCard(
-                  task: task,
-                  onStateChanged: (newState) async {
-                    await ApiService.instance.updateTaskState(
-                      task.id,
-                      newState,
-                    );
-                    await ApiService.instance.fetchCronById(cron.id);
-                    setState(() {});
-                  },
-                );
-              }, childCount: cron.tasks.length),
+          if (cron.tasks.isEmpty)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFF2196F3)),
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final task = cron.tasks[index];
+                  return TaskCard(
+                    task: task,
+                    onStateChanged: (newState) async {
+                      await ApiService.instance.updateTaskState(
+                        task.id,
+                        newState,
+                      );
+                      await ApiService.instance.fetchCronById(cron.id);
+                      setState(() {});
+                    },
+                    onDelete: () async {
+                      await ApiService.instance.deleteTask(task.id);
+                      await ApiService.instance.fetchCronById(cron.id);
+                      setState(() {});
+                      _fadeController.reset();
+                      _fadeController.forward();
+                    },
+                    onEdit: () => _showEditTaskDialog(task),
+                  );
+                }, childCount: cron.tasks.length),
+              ),
             ),
-          ),
         ],
       ),
     );
   }
 
   Widget _buildHeader(Cron cron) {
-    final dateFormat = DateFormat('EEEE, d MMMM yyyy', 'es_ES');
+    final dateFormat = DateFormat('EEEE, d MMMM yyyy');
     final parsedDate = DateTime.tryParse(cron.date) ?? DateTime.now();
     final formattedDate = dateFormat.format(parsedDate);
 
@@ -242,14 +704,14 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF7B2CBF), Color(0xFF9D4EDD)],
+          colors: [Color(0xFF2196F3), Color(0xFF9D4EDD)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7B2CBF).withValues(alpha: 0.3),
+            color: const Color(0xFF2196F3).withValues(alpha: 0.3),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),

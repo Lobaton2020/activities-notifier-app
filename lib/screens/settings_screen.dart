@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:activities_notifier_app/services/notification_service.dart';
-import 'package:activities_notifier_app/services/api_service.dart';
+import 'package:lobmindergo/services/notification_service.dart';
+import 'package:lobmindergo/services/api_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -33,16 +33,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: notificationService.vibrationEnabled,
             onChanged: (value) {
               notificationService.setVibrationEnabled(value);
-              setState(() {});
-            },
-          ),
-          _buildSwitchTile(
-            icon: Icons.flash_on,
-            title: 'Flash de pantalla',
-            subtitle: 'Titilar pantalla al notificar',
-            value: notificationService.screenFlashEnabled,
-            onChanged: (value) {
-              notificationService.setScreenFlashEnabled(value);
               setState(() {});
             },
           ),
@@ -102,7 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: SwitchListTile(
-        secondary: Icon(icon, color: const Color(0xFF7B2CBF)),
+        secondary: Icon(icon, color: const Color(0xFF2196F3)),
         title: Text(title, style: const TextStyle(color: Colors.white)),
         subtitle: Text(
           subtitle,
@@ -128,7 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
-        leading: Icon(icon, color: const Color(0xFF7B2CBF)),
+        leading: Icon(icon, color: const Color(0xFF2196F3)),
         title: Text(title, style: const TextStyle(color: Colors.white)),
         subtitle: Text(
           subtitle,
@@ -145,7 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Notificación de prueba enviada'),
-        backgroundColor: Color(0xFF7B2CBF),
+        backgroundColor: Color(0xFF2196F3),
       ),
     );
   }
@@ -153,7 +143,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _onTestAlarm() async {
     final cron = ApiService.instance.currentCron;
     if (cron != null && cron.tasks.isNotEmpty) {
-      await notificationService.triggerAlarm(cron.tasks.first);
+      final task = cron.tasks.first;
+      await notificationService.showTestNotification(task);
     }
   }
 }

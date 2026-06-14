@@ -1,4 +1,4 @@
-import 'package:activities_notifier_app/models/task_model.dart';
+import 'package:lobmindergo/models/task_model.dart';
 
 class Cron {
   final String id;
@@ -15,16 +15,28 @@ class Cron {
 
   factory Cron.fromJson(Map<String, dynamic> json) {
     final tasksJson = json['tasks'] as List? ?? [];
+    final cronDate = json['date'] ?? '';
     return Cron(
       id: json['id'] ?? '',
       name: json['name'] ?? '',
-      date: json['date'] ?? '',
-      tasks: tasksJson.map((task) => TaskModel.fromJson(task)).toList()
-        ..sort((a, b) {
-          final aTime = a.hour * 60 + a.minute;
-          final bTime = b.hour * 60 + b.minute;
-          return aTime.compareTo(bTime);
-        }),
+      date: cronDate,
+      tasks:
+          tasksJson.map((task) {
+            final taskModel = TaskModel.fromJson(task);
+            return TaskModel(
+              id: taskModel.id,
+              description: taskModel.description,
+              state: taskModel.state,
+              hour: taskModel.hour,
+              minute: taskModel.minute,
+              project: taskModel.project,
+              cronDate: cronDate,
+            );
+          }).toList()..sort((a, b) {
+            final aTime = a.hour * 60 + a.minute;
+            final bTime = b.hour * 60 + b.minute;
+            return aTime.compareTo(bTime);
+          }),
     );
   }
 

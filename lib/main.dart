@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:activities_notifier_app/screens/home_screen.dart';
-import 'package:activities_notifier_app/services/notification_service.dart';
-import 'package:activities_notifier_app/services/api_service.dart';
+import 'package:lobmindergo/screens/home_screen.dart';
+import 'package:lobmindergo/services/notification_service.dart';
+import 'package:lobmindergo/services/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +35,7 @@ class ActivitiesNotifierApp extends StatelessWidget {
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0D0D0D),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF7B2CBF),
+          primary: Color(0xFF2196F3),
           secondary: Color(0xFF00F5D4),
           surface: Color(0xFF1A1A2E),
           error: Color(0xFFFF6B6B),
@@ -64,13 +64,13 @@ class ActivitiesNotifierApp extends StatelessWidget {
             if (states.contains(WidgetState.selected)) {
               return const Color(0xFF00F5D4);
             }
-            return const Color(0xFF7B2CBF);
+            return const Color(0xFF2196F3);
           }),
           checkColor: WidgetStateProperty.all(const Color(0xFF0D0D0D)),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         ),
         floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFF7B2CBF),
+          backgroundColor: Color(0xFF2196F3),
           foregroundColor: Colors.white,
         ),
         textTheme: const TextTheme(

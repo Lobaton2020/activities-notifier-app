@@ -16,6 +16,7 @@ class TaskModel {
   final int hour;
   final int minute;
   final Project? project;
+  final String cronDate;
 
   TaskModel({
     required this.id,
@@ -24,13 +25,17 @@ class TaskModel {
     required this.hour,
     required this.minute,
     this.project,
+    this.cronDate = '',
   });
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
+    final stateValue = json['state'];
+    final isCompleted =
+        stateValue == true || stateValue == 'completed' || stateValue == 'true';
     return TaskModel(
       id: json['id'] ?? '',
       description: json['description'] ?? '',
-      state: json['state'] ?? false,
+      state: isCompleted,
       hour: json['hour'] ?? 0,
       minute: json['minute'] ?? 0,
       project: json['project'] != null
@@ -46,6 +51,12 @@ class TaskModel {
   }
 
   DateTime get scheduledDateTime {
+    if (cronDate.isNotEmpty) {
+      final parsed = DateTime.tryParse(cronDate);
+      if (parsed != null) {
+        return DateTime(parsed.year, parsed.month, parsed.day, hour, minute);
+      }
+    }
     final now = DateTime.now();
     return DateTime(now.year, now.month, now.day, hour, minute);
   }

@@ -1,163 +1,205 @@
 import 'package:flutter/material.dart';
-import 'package:activities_notifier_app/models/task_model.dart';
+import 'package:lobmindergo/models/task_model.dart';
 
-class TaskCard extends StatelessWidget {
+class TaskCard extends StatefulWidget {
   final TaskModel task;
   final Function(bool) onStateChanged;
+  final Function()? onDelete;
+  final Function()? onEdit;
 
-  const TaskCard({super.key, required this.task, required this.onStateChanged});
+  const TaskCard({
+    super.key,
+    required this.task,
+    required this.onStateChanged,
+    this.onDelete,
+    this.onEdit,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final isCompleted = task.state;
-    final isPast = task.isPast && !isCompleted;
+  State<TaskCard> createState() => _TaskCardState();
+}
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isCompleted
-              ? const Color(0xFF00F5D4).withValues(alpha: 0.3)
-              : const Color(0xFF7B2CBF).withValues(alpha: 0.3),
-          width: 1,
+class _TaskCardState extends State<TaskCard> {
+  bool _isLoading = false;
+
+  Future<void> _toggleComplete() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    final newState = !widget.task.state;
+    await widget.onStateChanged(newState);
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  void _showDeleteDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          'Eliminar Tarea',
+          style: TextStyle(color: Colors.white),
         ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                (isCompleted
-                        ? const Color(0xFF00F5D4)
-                        : const Color(0xFF7B2CBF))
-                    .withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+        content: Text(
+          '¿Eliminar "${widget.task.description}"?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => onStateChanged(!task.state),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                _buildCheckbox(isCompleted),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        task.description,
-                        style: TextStyle(
-                          color: isCompleted ? Colors.grey[500] : Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          decoration: isCompleted
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          if (task.project != null) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF7B2CBF,
-                                ).withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                task.project!.name,
-                                style: const TextStyle(
-                                  color: Color(0xFF9D4EDD),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          if (isPast)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                'ATRASADA',
-                                style: TextStyle(
-                                  color: Colors.redAccent,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _buildTime(isCompleted),
-              ],
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              widget.onDelete?.call();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: Colors.white),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildCheckbox(bool isCompleted) {
     return Container(
-      width: 28,
-      height: 28,
+      width: 24,
+      height: 24,
       decoration: BoxDecoration(
+        shape: BoxShape.circle,
         color: isCompleted ? const Color(0xFF00F5D4) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isCompleted
               ? const Color(0xFF00F5D4)
-              : const Color(0xFF7B2CBF),
+              : const Color(0xFF2196F3),
           width: 2,
         ),
       ),
       child: isCompleted
-          ? const Icon(Icons.check, color: Color(0xFF0D0D0D), size: 18)
+          ? const Icon(Icons.check, size: 16, color: Color(0xFF1A1A2E))
           : null,
     );
   }
 
-  Widget _buildTime(bool isCompleted) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isCompleted
-            ? const Color(0xFF00F5D4).withValues(alpha: 0.1)
-            : const Color(0xFF7B2CBF).withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        task.formattedTime,
-        style: TextStyle(
-          color: isCompleted ? const Color(0xFF00F5D4) : Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'monospace',
+  @override
+  Widget build(BuildContext context) {
+    final isCompleted = widget.task.state;
+    final isPast = widget.task.isPast && !isCompleted;
+
+    Widget cardContent = Opacity(
+      opacity: _isLoading ? 0.5 : 1.0,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A2E),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isCompleted
+                ? const Color(0xFF00F5D4).withValues(alpha: 0.3)
+                : const Color(0xFF2196F3).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: _toggleComplete,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  _buildCheckbox(isCompleted),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.task.description,
+                          style: TextStyle(
+                            color: isCompleted
+                                ? Colors.grey[500]
+                                : Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            decoration: isCompleted
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.task.formattedTime,
+                          style: TextStyle(
+                            color: isPast
+                                ? Colors.red[400]
+                                : const Color(0xFF2196F3),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_isLoading)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF2196F3),
+                      ),
+                    ),
+                  if (widget.task.project != null && !_isLoading)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2196F3).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        widget.task.project!.name,
+                        style: const TextStyle(
+                          color: Color(0xFF2196F3),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
+
+    if (widget.onEdit != null) {
+      return Dismissible(
+        key: Key(widget.task.id),
+        direction: DismissDirection.startToEnd,
+        confirmDismiss: (direction) async {
+          widget.onEdit!();
+          return false;
+        },
+        background: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2196F3),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.only(left: 20),
+          child: const Icon(Icons.edit, color: Colors.white),
+        ),
+        child: cardContent,
+      );
+    }
+    return cardContent;
   }
 }
