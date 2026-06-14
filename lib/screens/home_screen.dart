@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:activities_notifier_app/models/cron.dart';
 import 'package:activities_notifier_app/services/api_service.dart';
 import 'package:activities_notifier_app/services/notification_service.dart';
@@ -16,11 +17,19 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isLoading = false;
   String? _errorMessage;
+  String _logMessage = 'Iniciando...';
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  void _log(String message) {
+    setState(() {
+      _logMessage = message;
+    });
+    debugPrint('[HomeScreen] $message');
   }
 
   Future<void> _loadData() async {
@@ -29,14 +38,21 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorMessage = null;
     });
     try {
+      _log('Cargando crons...');
       await ApiService.instance.fetchCrons(limit: 10);
+      _log(
+        'Crons cargados: ${ApiService.instance.currentCron?.name ?? "ninguno"}',
+      );
       _scheduleNotifications();
+      _log('Notificaciones programadas');
     } catch (e) {
+      _log('Error: $e');
       setState(() {
         _errorMessage = 'Error al cargar: $e';
       });
     } finally {
       setState(() => _isLoading = false);
+      _log('Carga completada');
     }
   }
 
@@ -86,11 +102,30 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF7B2CBF)),
-            )
-          : _buildBody(),
+      body: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            color: const Color(0xFF1A1A2E),
+            child: Text(
+              _logMessage,
+              style: const TextStyle(
+                color: Color(0xFF00F5D4),
+                fontSize: 12,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: Color(0xFF7B2CBF)),
+                  )
+                : _buildBody(),
+          ),
+        ],
+      ),
     );
   }
 
