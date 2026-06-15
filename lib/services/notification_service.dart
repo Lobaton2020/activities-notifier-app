@@ -7,6 +7,53 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:screen_brightness/screen_brightness.dart';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+
+@pragma('vm:entry-point')
+Future<void> _alarmCallback(int id, [Map<String, dynamic>? params]) async {
+  print('[Alarm] Callback started for id: $id');
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final taskText = prefs.getString('task_$id') ?? 'Es hora de trabajar';
+
+    // Leer settings directamente o usar params
+    final vibrationEnabled =
+        params?['vibrationEnabled'] ??
+        prefs.getBool('vibrationEnabled') ??
+        true;
+    final ttsEnabled =
+        params?['ttsEnabled'] ?? prefs.getBool('ttsEnabled') ?? true;
+
+    print(
+      '[Alarm] Task: $taskText, vibration: $vibrationEnabled, tts: $ttsEnabled',
+    );
+
+    // Vibrate
+    if (vibrationEnabled) {
+      final hasVibrator = await Vibration.hasVibrator() ?? false;
+      if (hasVibrator) {
+        Vibration.vibrate(duration: 500);
+        await Future.delayed(const Duration(milliseconds: 500));
+        Vibration.vibrate(duration: 500);
+        print('[Alarm] Vibrated');
+      }
+    }
+
+    // TTS
+    if (ttsEnabled) {
+      final tts = FlutterTts();
+      await tts.setLanguage('es-CO');
+      await tts.setSpeechRate(0.5);
+      await tts.setVolume(1.0);
+      await tts.setPitch(1.0);
+      await tts.speak(taskText);
+      print('[Alarm] TTS spoken');
+    }
+  } catch (e) {
+    print('[Alarm] Error: $e');
+  }
+}
 
 class NotificationService {
   static final NotificationService instance = NotificationService._internal();
@@ -42,6 +89,7 @@ class NotificationService {
     );
     await _requestPermissions();
     await _initTts();
+    await AndroidAlarmManager.initialize();
   }
 
   Future<void> _initTts() async {
@@ -89,17 +137,30 @@ class NotificationService {
   }
 
   void _onNotificationTapped(NotificationResponse response) async {
-    final payload = response.payload;
-    if (payload != null && payload.isNotEmpty) {
-      final task = ApiService.instance.currentCron?.tasks.firstWhere(
-        (t) => t.id == payload,
-        orElse: () =>
-            ApiService.instance.currentCron?.tasks.first ??
-            ApiService.instance.currentCron!.tasks.first,
-      );
-      if (task != null) {
-        await speakTask(task);
+    // Solo abre la app al tocar notificación - no hace nada extra
+  }
+
+  Future<void> _flashScreen() async {
+    if (!_screenFlashEnabled) return;
+    try {
+      await ScreenBrightness().setScreenBrightness(1.0);
+      await Future.delayed(const Duration(seconds: 1));
+      await ScreenBrightness().resetScreenBrightness();
+    } catch (e) {
+      print('[Flash] Error: $e');
+    }
+  }
+
+  Future<void> _triggerVibration() async {
+    try {
+      final hasVibrator = await Vibration.hasVibrator() ?? false;
+      if (hasVibrator) {
+        Vibration.vibrate(duration: 500);
+        await Future.delayed(const Duration(milliseconds: 500));
+        Vibration.vibrate(duration: 500);
       }
+    } catch (e) {
+      print('[Vibration] Error: $e');
     }
   }
 
@@ -162,6 +223,35 @@ class NotificationService {
         payload: task.id,
       );
     }
+
+    // Programar alarma para TTS y vibración al mismo tiempo que la notificación
+    await _scheduleAlarm(task);
+  }
+
+  Future<void> _scheduleAlarm(TaskModel task) async {
+    if (!ttsEnabled && !vibrationEnabled) return;
+    final scheduledTime = task.scheduledDateTime;
+    if (scheduledTime.isBefore(DateTime.now())) return;
+
+    final taskId = task.id.hashCode;
+    final taskText = '${task.project?.name ?? "Tarea"}: ${task.description}';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('task_$taskId', taskText);
+    await prefs.setBool('vibrationEnabled', _vibrationEnabled);
+    await prefs.setBool('ttsEnabled', _ttsEnabled);
+    print('[Alarm] Scheduled for ${task.formattedTime}: $taskText');
+    print(
+      '[Alarm] Settings - vibration: $_vibrationEnabled, tts: $_ttsEnabled',
+    );
+
+    await AndroidAlarmManager.oneShotAt(
+      scheduledTime,
+      taskId,
+      _alarmCallback,
+      exact: true,
+      wakeup: true,
+      alarmClock: true,
+    );
   }
 
   Future<void> showTestNotification(TaskModel task) async {
@@ -172,8 +262,8 @@ class NotificationService {
         channelDescription: 'Notificaciones de alarmas',
         importance: Importance.max,
         priority: Priority.max,
-        playSound: _soundEnabled,
-        enableVibration: _vibrationEnabled,
+        playSound: soundEnabled,
+        enableVibration: vibrationEnabled,
         icon: '@mipmap/ic_launcher',
         color: const Color(0xFF2196F3),
         ledColor: const Color(0xFF00F5D4),
@@ -240,7 +330,26 @@ class NotificationService {
   Future<void> speakTask(TaskModel task) async {
     if (!_ttsEnabled) return;
     final text = '${task.project?.name ?? "Tarea"}: ${task.description}';
-    await _tts.speak(text);
+    print('[TTS] Speaking: $text');
+    try {
+      await _tts.speak(text);
+      print('[TTS] speak() called successfully');
+    } catch (e) {
+      print('[TTS] Error: $e');
+    }
+  }
+
+  Future<void> testTts() async {
+    print('[TTS] Testing TTS...');
+    try {
+      await _tts.setLanguage('es-CO');
+      final result = await _tts.speak(
+        'Prueba de voz. Tarea: Completar informe.',
+      );
+      print('[TTS] Test result: $result');
+    } catch (e) {
+      print('[TTS] Test error: $e');
+    }
   }
 
   Future<void> stopSpeaking() async {

@@ -165,16 +165,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _onTestTts() async {
+    await notificationService.testTts();
     final cron = ApiService.instance.currentCron;
     if (cron != null && cron.tasks.isNotEmpty) {
       final task = cron.tasks.first;
       await notificationService.speakTask(task);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Reproduciendo: ${task.description}'),
-          backgroundColor: const Color(0xFF2196F3),
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reproduciendo: ${task.description}'),
+            backgroundColor: const Color(0xFF2196F3),
+          ),
+        );
+      }
     }
   }
 }

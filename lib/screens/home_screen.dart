@@ -553,6 +553,9 @@ class _HomeScreenState extends State<HomeScreen>
                             await ApiService.instance.fetchCronById(
                               ApiService.instance.currentCron!.id,
                             );
+                            await NotificationService.instance
+                                .cancelTaskNotification(task.id);
+                            _scheduleNotifications();
                             setState(() {});
                             _fadeController.reset();
                             _fadeController.forward();
@@ -675,11 +678,19 @@ class _HomeScreenState extends State<HomeScreen>
                         newState,
                       );
                       await ApiService.instance.fetchCronById(cron.id);
+                      await NotificationService.instance.cancelTaskNotification(
+                        task.id,
+                      );
+                      _scheduleNotifications();
                       setState(() {});
                     },
                     onDelete: () async {
+                      await NotificationService.instance.cancelTaskNotification(
+                        task.id,
+                      );
                       await ApiService.instance.deleteTask(task.id);
                       await ApiService.instance.fetchCronById(cron.id);
+                      _scheduleNotifications();
                       setState(() {});
                       _fadeController.reset();
                       _fadeController.forward();
